@@ -137,8 +137,8 @@ def calculate_residues(f, s, poles, rcond=-1):
     b = concatenate((real(b), imag(b)))
     cA = np.linalg.cond(A)
     if cA > 1e13:
-        print 'Warning!: Ill Conditioned Matrix. Consider scaling the problem down'
-        print 'Cond(A)', cA
+        print ('Warning!: Ill Conditioned Matrix. Consider scaling the problem down')
+        print ('Cond(A)', cA)
     x, residuals, rnk, s = lstsq(A, b, rcond=rcond)
 
     # Recover complex values
@@ -156,15 +156,17 @@ def calculate_residues(f, s, poles, rcond=-1):
 
 def print_params(poles, residues, d, h):
     cfmt = "{0.real:g} + {0.imag:g}j"
-    print "poles: " + ", ".join(cfmt.format(p) for p in poles)
-    print "residues: " + ", ".join(cfmt.format(r) for r in residues)
-    print "offset: {:g}".format(d)
-    print "slope: {:g}".format(h)
+    print ("poles: " + ", ".join(cfmt.format(p) for p in poles))
+    print ("residues: " + ", ".join(cfmt.format(r) for r in residues))
+    print ("offset: {:g}".format(d))
+    print ("slope: {:g}".format(h))
 
 def vectfit_auto(f, s, n_poles=10, n_iter=10, show=False,
-                 inc_real=False, loss_ratio=1e-2, rcond=-1, track_poles=False):
+                 inc_real=False, loss_ratio=1e-2, rcond=-1, 
+                 track_poles=False, pole_locs=None):
     w = imag(s)
-    pole_locs = linspace(w[0], w[-1], n_poles+2)[1:-1]
+    if pole_locs is None:
+        pole_locs = linspace(w[0], w[-1], n_poles+2)[1:-1]
     lr = loss_ratio
     init_poles = poles = concatenate([[p*(-lr + 1j), p*(-lr - 1j)] for p in pole_locs])
 
@@ -184,16 +186,39 @@ def vectfit_auto(f, s, n_poles=10, n_iter=10, show=False,
     print_params(poles, residues, d, h)
     return poles, residues, d, h
 
+def poleres2pz(poles,residues,offset,slope, maxsteps=500):
+    """
+    Convert a pole-resiude representation of a TF -- 
+     
+        f(s) = Sum [r/(s-p)] + k + s * h 
+
+    to a pole zero representation
+
+        f(s) = Sum[s-z] / Sum[s-p]
+    """
+    from sympy import Symbol, together, expand, numer, denom, nroots
+
+    x = Symbol('x')
+    f = sum([r/(x-p) for p,r in zip(poles, residues)])
+    f += offset + slope*x
+
+    ft = together(f)
+    nf = expand(numer(ft))
+
+    zeros = nroots(nf,maxsteps=maxsteps)
+    return np.array([complex(xx) for xx in poles]), np.array([complex(xx) for
+                                                              xx in zeros])
+    
 def vectfit_auto_rescale(f, s, **kwargs):
     s_scale = abs(s[-1])
     f_scale = abs(f[-1])
-    print 'SCALED'
+    print ('SCALED')
     poles_s, residues_s, d_s, h_s = vectfit_auto(f / f_scale, s / s_scale, **kwargs)
     poles = poles_s * s_scale
     residues = residues_s * f_scale * s_scale
     d = d_s * f_scale
     h = h_s * f_scale / s_scale
-    print 'UNSCALED'
+    print ('UNSCALED')
     print_params(poles, residues, d, h)
     return poles, residues, d, h
 
